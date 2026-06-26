@@ -164,10 +164,10 @@ class ThrivaClient:
     def list_tests(
         self,
         *,
-        page_size: int = 100,
+        limit: int = 20,
     ) -> JsonObject:
         tests: list[JsonObject] = []
-        page_number = 1
+        offset = 0
         next_url: str | None = None
         using_link_pagination = False
 
@@ -176,8 +176,8 @@ class ThrivaClient:
             if next_url is None:
                 params = {
                     "filter[state]": "complete",
-                    "page[size]": page_size,
-                    "page[number]": page_number,
+                    "limit": limit,
+                    "offset": offset,
                 }
                 document = self.get_json("/tests", params=params)
             else:
@@ -199,9 +199,26 @@ class ThrivaClient:
                 continue
             if using_link_pagination:
                 break
-            if len(data) < page_size:
+
+            meta = document.get("meta", {})
+            assert isinstance(meta, dict), meta
+            pagination = meta.get("pagination")
+            if pagination is not None:
+                assert isinstance(pagination, dict), pagination
+                raw_limit = pagination["limit"]
+                raw_offset = pagination["offset"]
+                raw_total_count = pagination["total_count"]
+                assert isinstance(raw_limit, int), raw_limit
+                assert isinstance(raw_offset, int), raw_offset
+                assert isinstance(raw_total_count, int), raw_total_count
+                offset = raw_offset + raw_limit
+                if offset >= raw_total_count:
+                    break
+                continue
+
+            if len(data) < limit:
                 break
-            page_number += 1
+            offset += len(data)
             next_url = None
 
         return {"data": tests}

@@ -52,7 +52,7 @@ def test_list_tests_follows_links(monkeypatch: pytest.MonkeyPatch) -> None:
         get_json,
     )
 
-    result = client.list_tests(page_size=1)
+    result = client.list_tests(limit=1)
 
     assert result == {
         "data": [
@@ -64,8 +64,46 @@ def test_list_tests_follows_links(monkeypatch: pytest.MonkeyPatch) -> None:
         "/tests",
         params={
             "filter[state]": "complete",
-            "page[size]": 1,
-            "page[number]": 1,
+            "limit": 1,
+            "offset": 0,
+        },
+    )
+
+
+def test_list_tests_follows_offset_pagination(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = export.ThrivaClient.__new__(export.ThrivaClient)
+    get_json = Mock(
+        side_effect=[
+            {
+                "data": [
+                    {"type": "test", "id": "a"},
+                    {"type": "test", "id": "b"},
+                ],
+                "meta": {"pagination": {"limit": 2, "offset": 0, "total_count": 3}},
+            },
+            {
+                "data": [{"type": "test", "id": "c"}],
+                "meta": {"pagination": {"limit": 2, "offset": 2, "total_count": 3}},
+            },
+        ]
+    )
+    monkeypatch.setattr(client, "get_json", get_json)
+
+    result = client.list_tests(limit=2)
+
+    assert result == {
+        "data": [
+            {"type": "test", "id": "a"},
+            {"type": "test", "id": "b"},
+            {"type": "test", "id": "c"},
+        ],
+    }
+    get_json.assert_any_call(
+        "/tests",
+        params={
+            "filter[state]": "complete",
+            "limit": 2,
+            "offset": 2,
         },
     )
 

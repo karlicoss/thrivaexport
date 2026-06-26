@@ -60,6 +60,10 @@ The exporter does not hardcode this list. It starts from the test resource's
 relationships and probes accepted JSON:API include paths recursively, then uses
 the discovered paths for the detailed export.
 
+The `/v1/tests` list uses `limit` and `offset` parameters. It accepts
+`page[size]`/`page[number]` without an error, but ignores them and returns the
+  first page with `meta.pagination.limit == 20`.
+
 The old scripts contained stale cookies/JWT values, so they are kept under the
 gitignored `legacy/` directory as local reference material only.
 
