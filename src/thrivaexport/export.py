@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any, cast
 
 import requests
+from hpikit.json import Json
+from kloggy import get_logger
 
-from .common import Json, JsonObject
+logger = get_logger(__name__)
 
 _API_URL = "https://api.thriva.co/v1"
 _AUTH_URL = "https://api.thriva.co/auth/token"
@@ -24,13 +25,13 @@ _RETRYABLE_STATUS_CODES = {
 }
 
 
-def _load_secrets(path: Path) -> JsonObject:
+def _load_secrets(path: Path) -> Json:
     secrets = json.loads(path.read_text())
     assert isinstance(secrets, dict), secrets
     return secrets
 
 
-def _write_json(path: Path, value: Json) -> None:
+def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False))
 
@@ -42,7 +43,7 @@ def _safe_file_name(name: str) -> str:
     return name
 
 
-def _test_sort_key(resource: JsonObject) -> str:
+def _test_sort_key(resource: Json) -> str:
     attributes = resource.get("attributes", {})
     assert isinstance(attributes, dict), attributes
     for key in ["test_date", "scheduled_date", "completed_at", "created_at"]:
@@ -52,7 +53,7 @@ def _test_sort_key(resource: JsonObject) -> str:
     return "unknown"
 
 
-def _test_file_name(resource: JsonObject) -> str:
+def _test_file_name(resource: Json) -> str:
     type_ = resource["type"]
     id_ = resource["id"]
     assert type_ == "test", resource
@@ -60,7 +61,7 @@ def _test_file_name(resource: JsonObject) -> str:
     return f"{_test_sort_key(resource)}_{_safe_file_name(id_)}.json"
 
 
-def _relationship_names(resource: JsonObject) -> list[str]:
+def _relationship_names(resource: Json) -> list[str]:
     """
     Return names of linked resources advertised by a JSON:API object.
 
@@ -121,7 +122,7 @@ class ThrivaClient:
         *,
         email: str,
         password: str,
-    ) -> JsonObject:
+    ) -> Json:
         response = self.request(
             "POST",
             _AUTH_URL,
@@ -148,7 +149,7 @@ class ThrivaClient:
         endpoint_or_url: str,
         *,
         params: dict[str, str | int] | None = None,
-    ) -> JsonObject:
+    ) -> Json:
         url = endpoint_or_url if endpoint_or_url.startswith("http") else _API_URL + endpoint_or_url
         response = self.request(
             "GET",
@@ -165,8 +166,8 @@ class ThrivaClient:
         self,
         *,
         limit: int = 20,
-    ) -> JsonObject:
-        tests: list[JsonObject] = []
+    ) -> Json:
+        tests: list[Json] = []
         offset = 0
         next_url: str | None = None
         using_link_pagination = False
@@ -228,7 +229,7 @@ class ThrivaClient:
         test_id: str,
         *,
         max_depth: int = 4,
-    ) -> tuple[JsonObject, list[str]]:
+    ) -> tuple[Json, list[str]]:
         """
         Discover accepted JSON:API include paths for one test resource.
 
@@ -278,7 +279,7 @@ class ThrivaClient:
 
         return base, accepted
 
-    def get_test(self, test_id: str) -> JsonObject:
+    def get_test(self, test_id: str) -> Json:
         base, include_paths = self.discover_test_includes(test_id)
         if len(include_paths) == 0:
             return base
@@ -288,7 +289,7 @@ class ThrivaClient:
         )
 
 
-def _existing_detail_path(*, output_directory: Path, test: JsonObject) -> Path | None:
+def _existing_detail_path(*, output_directory: Path, test: Json) -> Path | None:
     test_id = test["id"]
     assert isinstance(test_id, str), test_id
     matches = sorted(output_directory.glob(f"*_{test_id}.json"))
@@ -311,10 +312,10 @@ def export_account(
     # We intentionally list only completed tests.
     # Active/scheduled tests are not persisted because their detail file would
     #   later need to change in place when blood results arrive.
-    print(f"Found {len(tests)} tests", file=sys.stderr)
+    logger.info(f"Found {len(tests)} tests")
     for index_, summary_raw in enumerate(tests, start=1):
         assert isinstance(summary_raw, dict), summary_raw
-        summary = cast(JsonObject, summary_raw)
+        summary = cast(Json, summary_raw)
         test_id = summary["id"]
         assert isinstance(test_id, str), test_id
         path = _existing_detail_path(output_directory=output_directory, test=summary)
@@ -326,7 +327,7 @@ def export_account(
         if state != "complete":
             if path is not None:
                 path.unlink()
-            print(f"[{index_}/{len(tests)}] {test_date} {state} (skip)", file=sys.stderr)
+            logger.info(f"[{index_}/{len(tests)}] {test_date} {state} (skip)")
             continue
 
         if path is None:
@@ -334,7 +335,7 @@ def export_account(
 
         should_fetch = refresh_existing or not path.exists()
         status = "refresh" if should_fetch else "existing"
-        print(f"[{index_}/{len(tests)}] {test_date} {state} ({status})", file=sys.stderr)
+        logger.info(f"[{index_}/{len(tests)}] {test_date} {state} ({status})")
         if should_fetch:
             detail = client.get_test(test_id)
             _write_json(path, detail)
@@ -382,7 +383,7 @@ def main() -> None:
         output_directory=args.output,
         refresh_existing=args.refresh_existing,
     )
-    print(f"Archive written to {args.output.resolve()}", file=sys.stderr)
+    logger.info(f"Archive written to {args.output.resolve()}")
 
 
 if __name__ == "__main__":

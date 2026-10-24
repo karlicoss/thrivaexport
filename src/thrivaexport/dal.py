@@ -1,30 +1,31 @@
 from __future__ import annotations
 
 import argparse
-import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from .common import Json, JsonObject
+from hpikit.datetime import AwareDateTime, aware
+from hpikit.json import Json, loads
 
 type ResourceKey = tuple[str, str]
 
 
-def _attributes(resource: JsonObject) -> JsonObject:
+def _attributes(resource: Json) -> Json:
     value = resource.get("attributes", {})
     assert isinstance(value, dict), value
     return value
 
 
-def _string_attribute(resource: JsonObject, name: str) -> str | None:
+def _string_attribute(resource: Json, name: str) -> str | None:
     value = _attributes(resource).get(name)
     assert value is None or isinstance(value, str), value
     return value
 
 
-def _resource_key(resource: JsonObject) -> ResourceKey:
+def _resource_key(resource: Json) -> ResourceKey:
     type_ = resource["type"]
     id_ = resource["id"]
     assert isinstance(type_, str), type_
@@ -32,7 +33,7 @@ def _resource_key(resource: JsonObject) -> ResourceKey:
     return (type_, id_)
 
 
-def _included_index(document: JsonObject) -> dict[ResourceKey, JsonObject]:
+def _included_index(document: Json) -> dict[ResourceKey, Json]:
     included = document.get("included", [])
     assert isinstance(included, list), included
     result = {}
@@ -42,7 +43,7 @@ def _included_index(document: JsonObject) -> dict[ResourceKey, JsonObject]:
     return result
 
 
-def _relationship_data(resource: JsonObject, name: str) -> Json | None:
+def _relationship_data(resource: Json, name: str) -> Any | None:
     relationships = resource.get("relationships", {})
     assert isinstance(relationships, dict), relationships
     relation = relationships.get(name)
@@ -52,7 +53,7 @@ def _relationship_data(resource: JsonObject, name: str) -> Json | None:
     return relation.get("data")
 
 
-def _relation_keys(resource: JsonObject, name: str) -> list[ResourceKey]:
+def _relation_keys(resource: Json, name: str) -> list[ResourceKey]:
     data = _relationship_data(resource, name)
     if data is None:
         return []
@@ -113,8 +114,8 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class AnalyteResult:
-    raw: JsonObject
-    analyte: JsonObject | None
+    raw: Json
+    analyte: Json | None
 
     @property
     def id(self) -> str:
@@ -156,22 +157,22 @@ class AnalyteResult:
         return _string_attribute(self.raw, "severity")
 
     @property
-    def processed_at(self) -> datetime | None:
+    def processed_at(self) -> AwareDateTime | None:
         value = _string_attribute(self.raw, "processed_at")
         if value is None:
             return None
-        return datetime.fromisoformat(value)
+        return aware(datetime.fromisoformat(value))
 
 
 @dataclass(frozen=True)
 class ThrivaTest:
     path: Path
-    raw: JsonObject
-    included: dict[ResourceKey, JsonObject]
+    raw: Json
+    included: dict[ResourceKey, Json]
 
     @classmethod
     def load(cls, path: Path) -> ThrivaTest:
-        document = json.loads(path.read_text())
+        document = loads(path.read_bytes())
         assert isinstance(document, dict), document
         data = document["data"]
         assert isinstance(data, dict), data
@@ -202,17 +203,17 @@ class ThrivaTest:
         return None
 
     @property
-    def completed_at(self) -> datetime | None:
+    def completed_at(self) -> AwareDateTime | None:
         value = _string_attribute(self.raw, "completed_at")
         if value is None:
             return None
-        return datetime.fromisoformat(value)
+        return aware(datetime.fromisoformat(value))
 
     @property
     def package_name(self) -> str | None:
         return _string_attribute(self.raw, "package_name")
 
-    def related(self, name: str) -> list[JsonObject]:
+    def related(self, name: str) -> list[Json]:
         resources = []
         for key in _relation_keys(self.raw, name):
             resource = self.included.get(key)
