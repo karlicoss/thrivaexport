@@ -3,6 +3,8 @@
 dynamic = ["version"]  # version is managed by build backend
 name = "thrivaexport"
 dependencies = [
+    "hpikit",
+    "kloggy",
 ]
 requires-python = ">=3.14"
 
@@ -25,6 +27,9 @@ dal = [
 export = [
     "requests",
 ]
+optional = [
+    "hpikit[optional]", # faster JSON parsing and transparent compression
+]
 
 [dependency-groups]
 # TODO: not sure, on the one hand could just use 'standard' dev dependency group
@@ -34,7 +39,7 @@ testing = [
     "pytest",
     "ruff",
 
-    "thrivaexport[dal,export]",
+    "thrivaexport[dal,export,optional]",
 ]
 typecheck = [
     "mypy",

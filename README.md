@@ -89,6 +89,11 @@ for test in dal.tests():
 
 ## Verification
 
+On 2026-06-26, a fresh export was compared against locally saved Thriva PDF
+lab reports from 2018-2022. Every parsed PDF report matched an exported JSON
+test; the only differences were presentation/precision rounding such as integer
+PDF values versus decimal API values.
+
 ```console
 uv run --extra export -m thrivaexport.export --help
 uv run --extra dal -m thrivaexport.dal --source exports/thriva
